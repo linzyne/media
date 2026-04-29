@@ -5,6 +5,9 @@ import heic2any from 'heic2any';
 import ImageEditor from './ImageEditor';
 import { UploadCloud, FileVideo, Download, Loader2, ArrowRight, X, Settings2, Scissors, Trash2 } from 'lucide-react';
 
+// Module-level flag: prevent React StrictMode double-invocation from loading FFmpeg twice
+let _ffmpegLoadStarted = false;
+
 const SEGMENT_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#f43f5e'];
 
 function fmtTime(s) {
@@ -117,6 +120,8 @@ function App() {
   const [webpSize, setWebpSize] = useState(null);
 
   const loadFFmpeg = async () => {
+    if (_ffmpegLoadStarted) return;
+    _ffmpegLoadStarted = true;
     setIsLoading(true);
     const ffmpeg = ffmpegRef.current;
     ffmpeg.on('log', ({ message }) => console.log('FFmpeg:', message));
@@ -128,6 +133,7 @@ function App() {
       });
       setLoaded(true);
     } catch (e) {
+      _ffmpegLoadStarted = false;
       console.error('Error loading ffmpeg', e);
       alert('FFmpeg 로딩에 실패했습니다. (보안 정책 에러)');
     }
@@ -249,11 +255,13 @@ function App() {
         if (seg.end < videoDuration - 0.01) args.push('-to', seg.end.toFixed(3));
         args.push(...codecArgs, '-vf', vfBase, outputName);
       } else {
+        // Trim each segment separately, concat raw streams, then apply vf filters once at the end
         const parts = activeSegments.map((seg, i) =>
-          `[0:v]trim=start=${seg.start.toFixed(3)}:end=${seg.end.toFixed(3)},setpts=PTS-STARTPTS,${vfBase}[v${i}]`
+          `[0:v]trim=start=${seg.start.toFixed(3)}:end=${seg.end.toFixed(3)},setpts=PTS-STARTPTS[v${i}]`
         );
         const concatIn = activeSegments.map((_, i) => `[v${i}]`).join('');
-        parts.push(`${concatIn}concat=n=${activeSegments.length}:v=1:a=0[out]`);
+        parts.push(`${concatIn}concat=n=${activeSegments.length}:v=1:a=0[cat]`);
+        parts.push(`[cat]${vfBase}[out]`);
         args = [
           '-i', inputName,
           '-filter_complex', parts.join(';'),
