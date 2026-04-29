@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
+public/ffmpeg-core.js
+public/ffmpeg-core.wasm
