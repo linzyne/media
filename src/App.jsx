@@ -3,7 +3,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import heic2any from 'heic2any';
 import ImageEditor from './ImageEditor';
-import { UploadCloud, FileVideo, Download, Loader2, ArrowRight, X, Settings2, Scissors, Trash2 } from 'lucide-react';
+import { UploadCloud, FileVideo, FileImage, Download, Loader2, ArrowRight, X, Settings2, Scissors, Trash2 } from 'lucide-react';
 
 // Module-level flag: prevent React StrictMode double-invocation from loading FFmpeg twice
 let _ffmpegLoadStarted = false;
@@ -95,6 +95,8 @@ function App() {
 
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
+  const [gifFile, setGifFile] = useState(null);
+  const [gifUrl, setGifUrl] = useState(null);
   const [webpUrl, setWebpUrl] = useState(null);
 
   const [fileType, setFileType] = useState(null);
@@ -143,6 +145,8 @@ function App() {
   const clearFile = () => {
     setVideoFile(null);
     setVideoUrl(null);
+    setGifFile(null);
+    setGifUrl(null);
     setWebpUrl(null);
     setWebpSize(null);
     setFileType(null);
@@ -155,6 +159,7 @@ function App() {
 
   const processSelectedFile = async (file) => {
     const isVideo = file.type.startsWith('video/');
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
     const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type === 'image/heic';
     const isImage = file.type.startsWith('image/');
 
@@ -166,6 +171,13 @@ function App() {
       setWebpSize(null);
       setProgress(0);
       setSegments([]);
+    } else if (isGif) {
+      setFileType('gif');
+      setGifFile(file);
+      setGifUrl(URL.createObjectURL(file));
+      setWebpUrl(null);
+      setWebpSize(null);
+      setProgress(0);
     } else if (isHeic) {
       setFileType('image');
       setIsConvertingHeic(true);
@@ -183,7 +195,7 @@ function App() {
       setFileType('image');
       setImageEditorFile({ url: URL.createObjectURL(file), name: file.name });
     } else {
-      alert('동영상 혹은 사진 파일(.heic, .jpg 등)만 업로드 가능합니다!');
+      alert('동영상, GIF, 혹은 사진 파일(.heic, .jpg 등)만 업로드 가능합니다!');
     }
   };
 
@@ -225,6 +237,41 @@ function App() {
   };
 
   useEffect(() => { loadFFmpeg(); }, []);
+
+  const convertGifToWebP = async () => {
+    if (!gifFile) return;
+    setIsConverting(true);
+    setProgress(0);
+    const ffmpeg = ffmpegRef.current;
+    const inputName = 'input.gif';
+    const outputName = 'output_animated.webp';
+
+    try {
+      await ffmpeg.writeFile(inputName, await fetchFile(gifFile));
+      const args = [
+        '-i', inputName,
+        '-vf', `scale=${scale}:-1:flags=lanczos`,
+        '-vcodec', 'libwebp',
+        '-q:v', quality.toString(),
+        '-compression_level', compression.toString(),
+        '-lossless', '0',
+        '-loop', '0',
+        '-an',
+        outputName,
+      ];
+      await ffmpeg.exec(args);
+      const data = await ffmpeg.readFile(outputName);
+      const sizeMB = (data.byteLength / (1024 * 1024)).toFixed(2);
+      setWebpSize(sizeMB < 1 ? (data.byteLength / 1024).toFixed(0) + ' KB' : sizeMB + ' MB');
+      setWebpUrl(URL.createObjectURL(new Blob([data.buffer], { type: 'image/webp' })));
+    } catch (e) {
+      console.error('GIF Conversion Failed:', e);
+      alert('GIF 변환 중 오류가 발생했습니다.');
+    } finally {
+      setIsConverting(false);
+      setProgress(100);
+    }
+  };
 
   const convertToWebP = async () => {
     if (!videoFile) return;
@@ -311,12 +358,12 @@ function App() {
               <>
                 <UploadCloud size={64} className="text-primary" style={{ marginBottom: '1rem', opacity: 0.8 }} />
                 <h3>클릭하거나 파일을 이곳에 드롭하세요</h3>
-                <p>지원 포맷: MP4, MOV, WEBM / HEIC, JPG, PNG</p>
+                <p>지원 포맷: MP4, MOV, WEBM / GIF / HEIC, JPG, PNG</p>
               </>
             )}
             <input
               type="file" ref={fileInputRef} style={{ display: 'none' }}
-              accept="video/*,.heic,.heif,image/jpeg,image/png"
+              accept="video/*,.heic,.heif,image/gif,image/jpeg,image/png"
               onChange={onFileInput}
             />
           </div>
@@ -324,6 +371,106 @@ function App() {
 
         {fileType === 'image' && imageEditorFile && (
           <ImageEditor fileUrl={imageEditorFile.url} fileName={imageEditorFile.name} onBack={clearFile} />
+        )}
+
+        {fileType === 'gif' && gifUrl && (
+          <div className="split-layout animate-fade-in">
+            <div className="main-preview-area glass" style={{ padding: '2rem', borderRadius: '1.5rem' }}>
+              <div className="file-info" style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <FileImage style={{ color: 'var(--accent)' }} size={32} />
+                  <div>
+                    <h4 style={{ fontWeight: 600 }}>{gifFile.name}</h4>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                      {(gifFile.size / (1024 * 1024)).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+                <button className="btn btn-danger" onClick={clearFile} disabled={isConverting} style={{ padding: '0.5rem', borderRadius: '0.5rem' }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              {!webpUrl ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '0.75rem', padding: '1rem', border: '1px solid var(--card-border)' }}>
+                    <img src={gifUrl} alt="GIF preview" style={{ maxWidth: '100%', maxHeight: '50vh', borderRadius: '0.5rem', objectFit: 'contain' }} />
+                  </div>
+                  <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                    오른쪽 패널에서 옵션을 조절한 뒤 [WebP로 변환]을 누르세요
+                  </p>
+                </div>
+              ) : (
+                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 style={{ margin: 0 }}>🎉 변환 완료!</h3>
+                    {webpSize && (
+                      <span style={{ background: 'rgba(16,185,129,0.2)', color: 'var(--success)', padding: '0.5rem 1rem', borderRadius: '2rem', fontWeight: 'bold' }}>
+                        최종 크기: {webpSize}
+                      </span>
+                    )}
+                  </div>
+                  <div className="preview-container" style={{ flex: 1 }}>
+                    <img src={webpUrl} alt="Converted WebP" style={{ maxHeight: '50vh', objectFit: 'contain' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="controls-sidebar">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--card-border)', paddingBottom: '1rem' }}>
+                <Settings2 size={20} /> GIF → WebP 변환 옵션
+              </h3>
+
+              <div className="options-panel" style={{ background: 'none', border: 'none', padding: 0 }}>
+                <div className="option-group" style={{ margin: 0 }}>
+                  <label>출력 너비 (Width: {scale}px)</label>
+                  <input type="range" min="200" max="800" step="10" value={scale} onChange={e => setScale(e.target.value)} disabled={isConverting} />
+                </div>
+                <div className="option-group" style={{ margin: 0 }}>
+                  <label>화질 퀄리티 ({quality}%)</label>
+                  <input type="range" min="10" max="100" step="5" value={quality} onChange={e => setQuality(e.target.value)} disabled={isConverting} />
+                </div>
+                <div className="option-group" style={{ margin: 0 }}>
+                  <label>압축 레벨 ({compression})</label>
+                  <input type="range" min="0" max="6" step="1" value={compression} onChange={e => setCompression(e.target.value)} disabled={isConverting} />
+                </div>
+              </div>
+
+              {!webpUrl ? (
+                <button
+                  className="btn btn-success"
+                  onClick={convertGifToWebP}
+                  disabled={!loaded || isConverting}
+                  style={{ width: '100%', padding: '1.25rem', marginTop: 'auto', display: 'flex', justifyContent: 'center' }}
+                >
+                  {isLoading ? (
+                    <><Loader2 className="animate-spin" /> 변환 모듈 로딩 중...</>
+                  ) : isConverting ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+                      <div><Loader2 className="animate-spin" /> 변환 중... ({progress}%)</div>
+                      <div className="progress-bar" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                        <div className="progress-fill" style={{ width: `${progress}%`, background: 'white' }}></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>✨ GIF → WebP 움짤 변환하기 <ArrowRight size={20} /></>
+                  )}
+                </button>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: 'auto' }}>
+                  <a href={webpUrl} download={`${gifFile.name.replace(/\.gif$/i, '')}_animated.webp`} style={{ textDecoration: 'none' }}>
+                    <button className="btn btn-success" style={{ width: '100%' }}>
+                      <Download size={20} /> 성공! 다운로드
+                    </button>
+                  </a>
+                  <button className="btn" onClick={clearFile} style={{ width: '100%', border: '1px solid var(--card-border)', background: 'transparent' }}>
+                    아예 새로 만들기
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {fileType === 'video' && videoUrl && (
