@@ -290,7 +290,7 @@ function App() {
       let vfBase = `scale=${scale}:-1:flags=lanczos,fps=${fps}`;
       if (parseFloat(sharpen) > 0) vfBase += `,unsharp=5:5:${sharpen}:5:5:0.0`;
       if (parseFloat(brightness) !== 0 || parseFloat(contrast) !== 1) vfBase += `,eq=brightness=${brightness}:contrast=${contrast}`;
-      vfBase += ',format=rgba';
+      vfBase += ',colorspace=all=bt709,format=rgba';
 
       const codecArgs = ['-vcodec', 'libwebp', '-q:v', quality.toString(), '-compression_level', compression.toString(), '-lossless', '0', '-loop', '0', '-an'];
 
