@@ -464,6 +464,9 @@ function App() {
                       <Download size={20} /> 성공! 다운로드
                     </button>
                   </a>
+                  <button className="btn" onClick={() => { setWebpUrl(null); setWebpSize(null); setProgress(0); }} style={{ width: '100%', border: '1px solid var(--card-border)', background: 'transparent' }}>
+                    설정 바꿔서 다시 변환
+                  </button>
                   <button className="btn" onClick={clearFile} style={{ width: '100%', border: '1px solid var(--card-border)', background: 'transparent' }}>
                     아예 새로 만들기
                   </button>
@@ -624,6 +627,9 @@ function App() {
                       <Download size={20} /> 성공! 다운로드
                     </button>
                   </a>
+                  <button className="btn" onClick={() => { setWebpUrl(null); setWebpSize(null); setProgress(0); }} style={{ width: '100%', border: '1px solid var(--card-border)', background: 'transparent' }}>
+                    설정 바꿔서 다시 변환
+                  </button>
                   <button className="btn" onClick={clearFile} style={{ width: '100%', border: '1px solid var(--card-border)', background: 'transparent' }}>
                     아예 새로 만들기
                   </button>
